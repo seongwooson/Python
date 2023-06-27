@@ -34,23 +34,23 @@ safety = dataset['safety'].cat.codes.values
 
 categorical_data = np.stack([price, maint, doors,persons, lug_capacity, safety], 1)
 categorical_data = torch.tensor(categorical_data, dtype=torch.int64)
-print("categorical data\n", categorical_data[:10])
+#print("categorical data\n", categorical_data[:10])
 
 #ouputs로 사용할 칼럼 -> 텐서로 변환
 #dataset은 이미 astype으로 범주형 타입으로 변환되어있음.
-print("dataset\n", dataset.output)
+#print("dataset\n", dataset.output)
 outputs = pd.get_dummies(dataset.output) #output 칼럼에 대해 가변수 생성
-print("outputs(dummies)\n", outputs)
+#print("outputs(dummies)\n", outputs)
 outputs = outputs.values #가변수 값들 저장
-print("outputs(values)\n", outputs)
+#print("outputs(values)\n", outputs)
 outputs = torch.tensor(outputs).flatten()    #1차원 텐서로 변환
-print("categorical_data shape\n", categorical_data.shape)
-print("ouputs shape\n", outputs.shape)
+#print("categorical_data shape\n", categorical_data.shape)
+#print("ouputs shape\n", outputs.shape)
 
 categorical_columns_sizes = [len(dataset[column].cat.categories) for column in categorical_columns]
-print("categorical columns sizes\n", categorical_columns_sizes)
+#print("categorical columns sizes\n", categorical_columns_sizes)
 categorical_embedding_sizes = [(col_size, min(50, (col_size+1)//2)) for col_size in categorical_columns_sizes]
-print(categorical_embedding_sizes)
+#print(categorical_embedding_sizes)
 
 total_records = 1728
 test_records = int(total_records * .2)
@@ -58,7 +58,7 @@ test_records = int(total_records * .2)
 categorical_train_data = categorical_data[:total_records - test_records] #80%
 categorical_test_data = categorical_data[total_records-test_records:total_records] #rest 20%
 train_outputs = outputs[:total_records - test_records]
-test_outputs = outputs[:total_records - test_records:total_records]
+test_outputs = outputs[total_records - test_records:total_records]
 
 
 ###
@@ -73,7 +73,7 @@ class Model(nn.Module):
         self.embedding_dropout = nn.Dropout(p)
         
         all_layers = []
-        num_categorical_cols = sum(nf for ni, nf in embedding_size)
+        num_categorical_cols = sum((nf for ni, nf in embedding_size))
         input_size = num_categorical_cols
         
         for i in layers:
@@ -90,13 +90,13 @@ class Model(nn.Module):
         embeddings = []
         for i,e in enumerate(self.all_embeddings):
             embeddings.append(e(x_categorical[:,i]))
-            x=torch.cat(embeddings, 1)
-            x=self.embedding_dropout(x)
-            x=self.layers(x)
-            return x
+        x=torch.cat(embeddings, 1)
+        x=self.embedding_dropout(x)
+        x=self.layers(x)
+        return x
 
 model = Model(categorical_embedding_sizes, 4, [200,100,50], p = 0.4)
-print(model)
+#print(model)
 
 loss_function = nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr = 0.001)
@@ -112,7 +112,7 @@ aggregated_losses = []
 train_outputs = train_outputs.to(device = device, dtype = torch.int64)
 
 for i in range(epochs):
-    i += 1
+    i += 1  
     y_pred = model(categorical_train_data).to(device)
     single_loss = loss_function(y_pred, train_outputs)
     aggregated_losses.append(single_loss)
@@ -125,3 +125,22 @@ for i in range(epochs):
     optimizer.step()
 
 print(f'epoch: {i:3} loss: {single_loss.item():10.10f}')
+
+#evaluate model with test datatsets
+test_outputs = test_outputs.to(device = device, dtype=torch.int64)
+with torch.no_grad():
+    y_val = model(categorical_test_data)
+    loss = loss_function(y_val, test_outputs)
+print(f'Loss: {loss:.8f}')
+
+#모델 예측 확인
+print(y_val[:5])
+
+y_val = np.argmax(y_val, axis = 1)
+print(y_val[:5])
+
+#테스트 데이터셋을 이용해 정확도 확인
+from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
+print(confusion_matrix(test_outputs, y_val))
+print(classification_report(test_outputs,y_val))
+print(accuracy_score(test_outputs, y_val))
