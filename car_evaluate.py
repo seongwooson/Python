@@ -89,7 +89,7 @@ class Model(nn.Module):
     def forward(self, x_categorical):
         embeddings = []
         for i,e in enumerate(self.all_embeddings):
-            embeddings.append(e(x_categorical[:,i]))
+            embeddings.append(e(x_categorical[:,i].to(self.all_embeddings[i].weight.device)))
         x=torch.cat(embeddings, 1)
         x=self.embedding_dropout(x)
         x=self.layers(x)
@@ -98,22 +98,23 @@ class Model(nn.Module):
 model = Model(categorical_embedding_sizes, 4, [200,100,50], p = 0.4)
 #print(model)
 
-loss_function = nn.CrossEntropyLoss()
-optimizer = torch.optim.Adam(model.parameters(), lr = 0.001)
-
 #GPU 유무에 따른 device 선정
 if torch.cuda.is_available():
     device = torch.device('cuda')
 else:
     device = torch.device('cpu')
-    
+
+model = model.to(device)
+loss_function = nn.CrossEntropyLoss()
+optimizer = torch.optim.Adam(model.parameters(), lr = 0.001)
+
 epochs = 500
 aggregated_losses = []
 train_outputs = train_outputs.to(device = device, dtype = torch.int64)
 
 for i in range(epochs):
     i += 1  
-    y_pred = model(categorical_train_data).to(device)
+    y_pred = model(categorical_train_data).to(device=device)
     single_loss = loss_function(y_pred, train_outputs)
     aggregated_losses.append(single_loss)
     
@@ -136,11 +137,13 @@ print(f'Loss: {loss:.8f}')
 #모델 예측 확인
 print(y_val[:5])
 
-y_val = np.argmax(y_val, axis = 1)
+y_val = torch.argmax(y_val, dim= 1)
 print(y_val[:5])
 
 #테스트 데이터셋을 이용해 정확도 확인
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
-print(confusion_matrix(test_outputs, y_val))
-print(classification_report(test_outputs,y_val))
-print(accuracy_score(test_outputs, y_val))
+test_outputs_cpu = test_outputs.cpu()
+y_val_cpu = y_val.cpu().numpy()
+print(confusion_matrix(test_outputs_cpu, y_val_cpu))
+print(classification_report(test_outputs_cpu,y_val_cpu))
+print(accuracy_score(test_outputs_cpu, y_val_cpu))
